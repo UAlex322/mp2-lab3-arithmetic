@@ -178,3 +178,9 @@ TEST(arithmetic, throw_when_incorrect_symbols_is_ok) {
 	for (size_t i = 0; i < 10; ++i)
 		ASSERT_ANY_THROW(compute(expr[i]));
 }
+
+TEST(arithmetic, throw_when_unpaired_brackets_is_ok) {
+	string expr[4]{")", "(", "(3+1))", "(3+5-(1+3)"};
+	for (size_t i = 0; i < 4; ++i)
+		ASSERT_ANY_THROW(compute(expr[i]));
+}

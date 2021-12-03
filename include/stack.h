@@ -11,7 +11,7 @@
 template <typename ValType>
 class MyStack {
 public:
-	MyStack(size_t cap = 0): capacity(cap) {
+	MyStack(const size_t cap = 0): capacity(cap) {
 		data = new ValType[cap];
 	}
 
@@ -23,7 +23,6 @@ public:
 
 	~MyStack() {
 		delete[] data;
-		capacity = _size = 0;
 	}
 
 	void push(const ValType &elem) {
@@ -44,12 +43,6 @@ public:
 		data[_size++] = elem;
 	}
 
-	void clear() {
-		delete[] data;
-		data = new ValType[capacity];
-		_size = 0;
-	}
-
 	void pop() {
 		if (_size == 0)
 			throw "MyStack::pop(): stack is empty";
@@ -57,8 +50,10 @@ public:
 		--(_size);
 	}
 
-	inline size_t size() {
-		return this->_size;
+	void clear() {
+		delete[] data;
+		data = new ValType[capacity];
+		_size = 0;
 	}
 
 	ValType top() {
@@ -66,6 +61,10 @@ public:
 			throw "MyStack::top(): stack is empty";
 
 		return data[_size-1];
+	}
+
+	inline size_t size() {
+		return this->_size;
 	}
 
 	inline bool empty() {

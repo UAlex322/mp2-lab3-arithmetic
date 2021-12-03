@@ -1,10 +1,11 @@
 // реализация пользовательского приложения
 #include "../include/arithmetic.h"
 #include <iostream>
+#include <algorithm>
 using namespace std;
 
 int main() {
-	string expression;
+	string expr, no_whitespace_expr;
 	double value;
 
 	cout << "CALCULATOR" << endl;
@@ -13,32 +14,31 @@ int main() {
 	cout << "You can enter 'exit' anytime you want to exit" << endl << endl;
 
 	while (true) {
-		cout << "Enter the expression and press Enter: ";
-		getline(cin, expression);
-		expression.erase(remove(expression.begin(), expression.end(), ' '), expression.end());
+		cout << "Enter the expr and press Enter: ";
+		getline(cin, no_whitespace_expr);
+		expr = no_whitespace_expr;
+		no_whitespace_expr.erase(remove(no_whitespace_expr.begin(), no_whitespace_expr.end(), ' '), no_whitespace_expr.end());
 
-		if (expression == "exit")
+		if (no_whitespace_expr == "exit")
 			break;
 
 		bool exception_happened = true;
 		cout.precision(16);
 		while (exception_happened) {
 			try {
-				value = compute(expression);
+				value = compute(expr);
 				exception_happened = false;
 			}
 			catch (const runtime_error &err) {
-				cout << err.what() << endl;
+				cout << "Enter the expr and press Enter: ";
+				getline(cin, expr);
+				expr.erase(remove(expr.begin(), expr.end(), ' '), expr.end());
 
-				cout << "Enter the expression and press Enter: ";
-				getline(cin, expression);
-				expression.erase(remove(expression.begin(), expression.end(), ' '), expression.end());
-
-				if (expression == "exit")
+				if (expr == "exit")
 					break;
 			}
 		}
-		if (expression == "exit") // exit if "exit" was entered in exception-loop
+		if (expr == "exit") // exit if "exit" was entered in exception-loop
 			break;
 
 		cout << "Result: " << value << endl << endl;
