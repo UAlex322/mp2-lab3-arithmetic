@@ -7,44 +7,47 @@
 #include "../include/arithmetic.h"
 using namespace std;
 
-std::map<string, unsigned char> priority{{"+", 1}, {"-", 1}, {"*", 2}, {"/", 2}};
-// Priority of operations
-
 #define NUM 1
 #define OP 2
 #define OPEN_BR 3
 #define CLOSE_BR 4
 // Типы токенов: 1 - число, 2 - операция, 3 - открывающая скобка, 4 - закрывающая скобка
 
-struct Token {
-	char type;		// имеет одно из определённых выше значений
-	size_t pos;		// позиция начала токена в строке с выражением
-	double num;		// значение числа, если токен хранит число
-	string op;		// символ операции, если токен хранит операцию
+Expression::Expression(const string &expr) {
+	_tokens = parse(expr);
+	vector<string> errors = check();
 
-	explicit Token(char type = 0, size_t pos = -1, double num = 0.0): type(type), pos(pos), num(num), op("") {}
-	explicit Token(char type, size_t pos, string op): type(type), pos(pos), op(op) {}
-
-	bool operator==(const Token &token) {
-		return (type == token.type && op == token.op);
+	if (_tokens.empty() || !errors.empty()) {
+		cout << "Expression is incorrect!" << endl;
+		if (_tokens.empty())
+			cout << "Empty expression" << endl;
+		for (string &error : errors) {
+			cout << error << endl;
+		}
+		cout << endl;
+		throw runtime_error("Expr is incorrect");
 	}
-};
 
-std::vector<Token> parse(const string &expr);							// выражение -> токены
-bool check(const string &expr);											// проверка выражения на корректность
-std::vector<Token> make_postfix_notation(const vector<Token> tokens);	// инфиксная нотация -> постфиксная запись
-double compute_postfix(const vector<Token> postfix);					// вычисление выражения в постфиксной записи
+	make_postfix_notation();
+}
 
-
-vector<Token> parse(string &expr) {
+vector<Expression::Token> Expression::parse(const string &expr) {
 	vector<Token> tokens;
 	size_t first_digit_pos = -1;	// позиция первой цифры секущего считываемого числа; -1, если в данный момент не считывается число
+	size_t first_letter_pos = -1;	// позиция первой буквы текущей считываемой переменной; -1, если в данный момент не считывается переменная
 	bool was_dot = false;			// была ли считана точка действительного числа
 
 	for (size_t i = 0; i < expr.size(); ++i) {
-		if (expr[i] == ' ') continue;
+		// если не считывается число, то пробел несущественен
+		if (expr[i] == ' ' && first_digit_pos == -1 && first_letter_pos == -1) continue;
 
-		if ('0' <= expr[i] && expr[i] <= '9') {
+		else if ('a' <= expr[i] && expr[i] <= 'z' || 'A' <= expr[i] && expr[i] <= 'Z') {
+			// запоминаем позицию, если встретили первую цифру очередной переменной или функции
+			if (first_letter_pos == -1)
+				first_letter_pos = i;
+		}
+
+		else if ('0' <= expr[i] && expr[i] <= '9') {
 			// запоминаем позицию, если встретили первую цифру очередную числа
 			if (first_digit_pos == -1)
 				first_digit_pos = i;
@@ -54,50 +57,80 @@ vector<Token> parse(string &expr) {
 		else if (first_digit_pos != -1 && expr[i] == '.' && !was_dot)
 			was_dot = true;
 
-		// встретилось что-то, отличное от цифры или точки, есле для последнего числа она уже была считана
+		// встретилось что-то, отличное от цифры или точки, если для последнего числа она уже была считана
 		else {
 			was_dot = false;
 
 			// число считано
 			if (first_digit_pos != -1) {
-				tokens.push_back(Token(NUM, first_digit_pos, stod(expr.substr(first_digit_pos, i-first_digit_pos))));
+				if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
+					tokens.pop_back();
+					tokens.push_back(Token(NUM, -stod(expr.substr(first_digit_pos, i-first_digit_pos)), "", first_digit_pos));
+				}
+				else {
+					tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, i-first_digit_pos)), "", first_digit_pos));
+				}
+
 				first_digit_pos = -1;
+			}
+
+			// переменная считана
+			if (first_letter_pos != -1) {
+				if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
+					tokens.pop_back();
+					tokens.push_back(Token(NUM, -1.0, expr.substr(first_letter_pos, i-first_letter_pos), first_letter_pos));
+				}
+				else {
+					tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, i-first_letter_pos), first_letter_pos));
+				}
+
+				first_letter_pos = -1;
 			}
 
 			// считана открывающая скобка
 			if (expr[i] == '(')
-				tokens.push_back(Token(OPEN_BR, i));
+				tokens.push_back(Token(OPEN_BR, 0.0, "", i));
 
 			// считана закрывающая скобка
 			else if (expr[i] == ')')
-				tokens.push_back(Token(CLOSE_BR, i));
-
-			// считан минус, который может быть унарным
-			else if (expr[i] == '-' && (tokens.empty() || tokens.back().type == OPEN_BR)) {
-				tokens.push_back(Token(NUM, -1, 0.0));
-				tokens.push_back(Token(OP, i, "-"));
-			}
+				tokens.push_back(Token(CLOSE_BR, 0.0, "", i));
 
 			// считано что-то другое - операция или недопустимый символ
-			else
-				tokens.push_back(Token(OP, i, string(1,expr[i])));
+			else if (expr[i] != ' ')
+				tokens.push_back(Token(OP, 0.0, string(1, expr[i]), i));
 		}
 	}
 
 	// проверка, что могло остаться несчитанное число
 	if (first_digit_pos != -1) {
-		tokens.push_back(Token(NUM, first_digit_pos, stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos))));
+		// проверка, что перед этим был унарный минус - либо до этого вообще не было символов
+		if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, 0))) {
+			tokens.pop_back();
+			tokens.push_back(Token(NUM, -stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos)), "", first_digit_pos));
+		}
+		else
+			tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos)), "", first_digit_pos));
+	}
+
+	// проверка, что могло остаться несчитанное имя переменной
+	if (first_letter_pos != -1) {
+		if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
+			tokens.pop_back();
+			tokens.push_back(Token(NUM, -1.0, expr.substr(first_letter_pos, expr.size()-first_letter_pos), first_letter_pos));
+		}
+		else
+			tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, expr.size()-first_letter_pos), first_letter_pos));
 	}
 
 	return tokens;
 }
 
-vector<string> check(vector<Token> &tokens) {
+vector<string> Expression::check() {
 	char last_state = OPEN_BR;		// тип последнего считанного токена
 	MyStack<Token> correct_brackets; // стек проверки правильной скобочной последовательности
 	vector<string> errors;
 
-	for (Token &token : tokens) {
+	for (const Token &token : _tokens) {
 		switch (token.type) {
 			case NUM:
 				if (last_state == NUM)
@@ -109,10 +142,10 @@ vector<string> check(vector<Token> &tokens) {
 
 			case OP:
 				// если символа нет в таблице допустимых операций, выражение некорректно
-				if (priority.find(token.op) == priority.end())
+				if (priority.find(token.name) == priority.end())
 					errors.push_back("Error at position " + to_string(token.pos) + ": incorrect symbol");
 				else if (last_state == OP)
-						errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect operation after operation");
+					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect operation after operation");
 				else if (last_state == OPEN_BR)
 					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect operation after opening bracket");
 
@@ -125,6 +158,7 @@ vector<string> check(vector<Token> &tokens) {
 					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect opening bracket after closing bracket");
 
 				correct_brackets.push(token);
+
 				break;
 
 			case CLOSE_BR:
@@ -138,6 +172,7 @@ vector<string> check(vector<Token> &tokens) {
 				}
 				else
 					correct_brackets.pop();
+
 				break;
 		}
 
@@ -152,27 +187,32 @@ vector<string> check(vector<Token> &tokens) {
 	return errors;
 }
 
-std::vector<Token> make_postfix_notation(std::vector<Token> tokens) {
+void Expression::make_postfix_notation() {
 	vector<Token> postfix;
 	MyStack<Token> ops;
 
-	for (Token &token: tokens) {
+	for (const Token &token: _tokens) {
 		switch (token.type) {
 			case NUM:
+				if (token.name != "")
+					variable_positions[token.name].push_back(postfix.size());
 				postfix.push_back(token);
+
 				break;
 
 			case OP:
-				if (!ops.empty() && priority[ops.top().op] >= priority[token.op])
-					while (!ops.empty() && ops.top().type != OPEN_BR && priority[ops.top().op] >= priority[token.op]) {
+				if (!ops.empty() && priority[ops.top().name] >= priority[token.name])
+					while (!ops.empty() && ops.top().type != OPEN_BR && priority[ops.top().name] >= priority[token.name]) {
 						postfix.push_back(ops.top());
 						ops.pop();
 					}
 				ops.push(token);
+
 				break;
 
 			case OPEN_BR:
 				ops.push(token);
+
 				break;
 
 			case CLOSE_BR:
@@ -181,6 +221,7 @@ std::vector<Token> make_postfix_notation(std::vector<Token> tokens) {
 					ops.pop();
 				}
 				ops.pop();
+
 				break;
 		}
 	}
@@ -190,14 +231,43 @@ std::vector<Token> make_postfix_notation(std::vector<Token> tokens) {
 		ops.pop();
 	}
 
-	return postfix;
+	_tokens = postfix;
 }
 
-double compute_postfix(vector<Token> postfix) {
+double Expression::compute() {
+	vector<Token> copy_tokens = _tokens; // копия набора лексем для вычисления, чтобы не портить исходные данные
 	MyStack<double> operands;
 	double result, op1, op2;
+	
+	if (!variable_positions.empty()) {
+		cout << "Enter values of variables:" << endl;
+		for (auto &var : variable_positions) {
+			string name = var.first, str_value;
+			double value;
+			bool exception_happened = true;
 
-	for (Token &token: postfix) {
+			cout << name << " = ";
+			getline(cin, str_value);
+
+			// обработка неправильного ввода
+			while (exception_happened) {
+				try {
+					value = stod(str_value);
+					exception_happened = false;
+				}
+				catch (...) {
+					cout << "Incorrect input, try again" << endl;
+					cout << name << " = ";
+					getline(cin, str_value);
+				}
+			}
+
+			for (auto &pos : variable_positions[name])
+				copy_tokens[pos].num = (copy_tokens[pos].num == -1.0) ? -value : value;
+		}
+	}
+
+	for (Token &token: copy_tokens) {
 		switch (token.type) {
 			case NUM:
 				operands.push(token.num);
@@ -209,14 +279,14 @@ double compute_postfix(vector<Token> postfix) {
 				op2 = operands.top();
 				operands.pop();
 
-				string op = token.op;
-				if (op == "+")
+				string name = token.name;
+				if (name == "+")
 					result = op2 + op1;
-				else if (op == "-")
+				else if (name == "-")
 					result = op2 - op1;
-				else if (op == "*")
+				else if (name == "*")
 					result = op1 * op2;
-				else if (op == "/")
+				else if (name == "/")
 					result = op2 / op1;
 
 				operands.push(result);
@@ -227,18 +297,6 @@ double compute_postfix(vector<Token> postfix) {
 	return operands.top();
 }
 
-double compute(std::string &expr) { // performs all the stages
-	vector<Token> tokens = parse(expr);
-	vector<string> errors = check(tokens);
-	if (errors.empty()) {
-		tokens = make_postfix_notation(tokens);
-		return compute_postfix(tokens);
-	}
-	else {
-		std::cout << "Expression is incorrect!\n";
-		for (string &error : errors)
-			cout << error << endl;
-		cout << endl;
-		throw runtime_error("Expr is incorrect");
-	}
+bool Expression::has_no_variables() {
+	return variable_positions.empty();
 }
