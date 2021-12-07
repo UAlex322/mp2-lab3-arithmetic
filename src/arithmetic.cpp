@@ -63,27 +63,13 @@ vector<Expression::Token> Expression::parse(const string &expr) {
 
 			// число считано
 			if (first_digit_pos != -1) {
-				if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
-					tokens.pop_back();
-					tokens.push_back(Token(NUM, -stod(expr.substr(first_digit_pos, i-first_digit_pos)), "", first_digit_pos));
-				}
-				else {
-					tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, i-first_digit_pos)), "", first_digit_pos));
-				}
-
+				tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, i-first_digit_pos)), "", first_digit_pos));
 				first_digit_pos = -1;
 			}
 
 			// переменная считана
 			if (first_letter_pos != -1) {
-				if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
-					tokens.pop_back();
-					tokens.push_back(Token(NUM, -1.0, expr.substr(first_letter_pos, i-first_letter_pos), first_letter_pos));
-				}
-				else {
-					tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, i-first_letter_pos), first_letter_pos));
-				}
-
+				tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, i-first_letter_pos), first_letter_pos));
 				first_letter_pos = -1;
 			}
 
@@ -95,6 +81,10 @@ vector<Expression::Token> Expression::parse(const string &expr) {
 			else if (expr[i] == ')')
 				tokens.push_back(Token(CLOSE_BR, 0.0, "", i));
 
+			// считан унарный минус
+			else if (expr[i] == '-' && (tokens.empty() || tokens.back().type == OPEN_BR || tokens.back().type == OP))
+				tokens.push_back(Token(OP, 0.0, "-u", i));
+
 			// считано что-то другое - операция или недопустимый символ
 			else if (expr[i] != ' ')
 				tokens.push_back(Token(OP, 0.0, string(1, expr[i]), i));
@@ -103,23 +93,12 @@ vector<Expression::Token> Expression::parse(const string &expr) {
 
 	// проверка, что могло остаться несчитанное число
 	if (first_digit_pos != -1) {
-		// проверка, что перед этим был унарный минус - либо до этого вообще не было символов
-		if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, 0))) {
-			tokens.pop_back();
-			tokens.push_back(Token(NUM, -stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos)), "", first_digit_pos));
-		}
-		else
-			tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos)), "", first_digit_pos));
+		tokens.push_back(Token(NUM, stod(expr.substr(first_digit_pos, expr.size()-first_digit_pos)), "", first_digit_pos));
 	}
 
 	// проверка, что могло остаться несчитанное имя переменной
 	if (first_letter_pos != -1) {
-		if (!tokens.empty() && tokens.back().name == "-" && (tokens.size() == 1 || tokens[tokens.size()-2].type == OP || tokens[tokens.size()-2] == Token(OPEN_BR, -1))) {
-			tokens.pop_back();
-			tokens.push_back(Token(NUM, -1.0, expr.substr(first_letter_pos, expr.size()-first_letter_pos), first_letter_pos));
-		}
-		else
-			tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, expr.size()-first_letter_pos), first_letter_pos));
+		tokens.push_back(Token(NUM, 1.0, expr.substr(first_letter_pos, expr.size()-first_letter_pos), first_letter_pos));
 	}
 
 	return tokens;
@@ -142,12 +121,13 @@ vector<string> Expression::check() {
 
 			case OP:
 				// если символа нет в таблице допустимых операций, выражение некорректно
-				if (priority.find(token.name) == priority.end())
+				if (prior.find(token.name) == prior.end())
 					errors.push_back("Error at position " + to_string(token.pos) + ": incorrect symbol");
-				else if (last_state == OP)
-					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect operation after operation");
-				else if (last_state == OPEN_BR)
-					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect operation after opening bracket");
+				// если бинарная операция идёт следом за бинарной операцией, выражение некорректно
+				else if (last_state == OP && prior[token.name] < 0)
+					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect binary operation after operation");
+				else if (last_state == OPEN_BR && prior[token.name] < 0)
+					errors.push_back("Error at position " + to_string(token.pos) + ": didn't expect binary operation after opening bracket");
 
 				break;
 
@@ -179,6 +159,9 @@ vector<string> Expression::check() {
 		last_state = token.type;
 	}
 
+	if (!_tokens.empty() && _tokens.back().type == OP && prior.find(_tokens.back().name) != prior.end() && prior[_tokens.back().name] > 0)
+		errors.push_back("Error at position " + to_string(_tokens.back().pos) + ": expected operand after unary operation");
+
 	while (!correct_brackets.empty()) {
 		errors.push_back("Error at position " + to_string(correct_brackets.top().pos) + ": unpaired bracket");
 		correct_brackets.pop();
@@ -192,17 +175,18 @@ void Expression::make_postfix_notation() {
 	MyStack<Token> ops;
 
 	for (const Token &token: _tokens) {
+		string name = token.name;
 		switch (token.type) {
 			case NUM:
 				if (token.name != "")
-					variable_positions[token.name].push_back(postfix.size());
+					variable_positions[name].push_back(postfix.size());
 				postfix.push_back(token);
 
 				break;
 
 			case OP:
-				if (!ops.empty() && priority[ops.top().name] >= priority[token.name])
-					while (!ops.empty() && ops.top().type != OPEN_BR && priority[ops.top().name] >= priority[token.name]) {
+				if (!ops.empty() && (prior[name] < 0 && prior[ops.top().name] >= prior[name] || prior[name] > 0 && prior[ops.top().name] > prior[name]))
+					while (!ops.empty() && ops.top().type != OPEN_BR && (prior[name] < 0 && prior[ops.top().name] >= prior[name] || prior[name] > 0 && prior[ops.top().name] > prior[name])) {
 						postfix.push_back(ops.top());
 						ops.pop();
 					}
@@ -263,7 +247,7 @@ double Expression::compute() {
 			}
 
 			for (auto &pos : variable_positions[name])
-				copy_tokens[pos].num = (copy_tokens[pos].num == -1.0) ? -value : value;
+				copy_tokens[pos].num = value;
 		}
 	}
 
@@ -274,20 +258,27 @@ double Expression::compute() {
 				break;
 
 			case OP:
+				string name = token.name;
+
 				op1 = operands.top();
 				operands.pop();
-				op2 = operands.top();
-				operands.pop();
 
-				string name = token.name;
-				if (name == "+")
-					result = op2 + op1;
-				else if (name == "-")
-					result = op2 - op1;
-				else if (name == "*")
-					result = op1 * op2;
-				else if (name == "/")
-					result = op2 / op1;
+				if (name == "-u")
+					result = -op1;
+
+				else {
+					op2 = operands.top();
+					operands.pop();
+
+					if (name == "+")
+						result = op2 + op1;
+					else if (name == "-")
+						result = op2 - op1;
+					else if (name == "*")
+						result = op1 * op2;
+					else if (name == "/")
+						result = op2 / op1;
+				}
 
 				operands.push(result);
 				break;

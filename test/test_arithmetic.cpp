@@ -145,3 +145,16 @@ TEST(arithmetic, operations_with_variables_are_ok) {
 	for (size_t i = 0; i < 5; ++i)
 		ASSERT_NO_THROW(Expression expr(exprs[i]));
 }
+
+TEST(arithmetic, unary_minus_is_ok) {
+	string exprs[5]{"4/-1", "4--1", "3/-(1+4)", "4/--(1)", "1---1"};
+	double equal[5]{-4.0, 5.0, -0.6, 4.0, 0.0};
+	for (size_t i = 0; i < 5; ++i)
+		EXPECT_DOUBLE_EQ(Expression(exprs[i]).compute(), equal[i]);
+}
+
+TEST(arithmetic, throw_when_incorrect_unary_minus_is_ok) {
+	string exprs[5]{"--", "1--", "3-+3", "-)", "-("};
+	for (size_t i = 0; i < 5; ++i)
+		ASSERT_ANY_THROW(Expression expr(exprs[i]));
+}

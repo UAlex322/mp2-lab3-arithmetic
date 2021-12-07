@@ -7,8 +7,8 @@
 using namespace std;
 
 class Expression {
-	std::map<string, unsigned char> priority{{"+", 1}, {"-", 1}, {"*", 2}, {"/", 2}};
-	// Priority of operations
+	std::map<string, char> prior{{"+", -2}, {"-", -2}, {"*", -1}, {"/", -1}, {"-u", 1}};
+	// Приоритет операций (левоассоциативные имеют отрицательное значение, правоассоциативные - положительное)
 
 	struct Token {
 		char type;		// имеет одно из определённых выше значений

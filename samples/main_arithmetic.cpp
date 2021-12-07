@@ -4,14 +4,14 @@
 #include <algorithm>
 #include <sstream>
 
-bool is_exit(string &str) {
+bool is_equal(const string &str, const string &compare) {
 	stringstream ss;
 	string word;
 	size_t counter = 0;
 
 	ss << str;
 	while (ss >> word) ++counter;
-	return (counter == 1 && word == "exit");
+	return (counter == 1 && word == compare);
 }
 
 int main() {
@@ -27,7 +27,7 @@ int main() {
 		cout << "Enter the expr and press Enter (enter 'exit' to exit): ";
 		getline(cin, expr);
 
-		if (is_exit(expr))
+		if (is_equal(expr, "exit"))
 			break;
 
 		bool exception_happened = true;
@@ -45,14 +45,14 @@ int main() {
 						cout << "Result: " << value << endl << endl;
 
 						cout << "Do you want to continue with this expression? (yes/no/exit): ";
-						cin >> choose;
+						getline(cin, choose);
 						while (choose != "yes" && choose != "no" && choose != "exit") {
 							cout << "Incorrect answer, try again" << endl;
 							cout << "Do you want to continue with this expression? (yes/no/exit): ";
-							cin >> choose;
+							getline(cin, choose);
 						}
 
-						if (choose == "no" || choose == "exit")
+						if (is_equal(choose, "no") || is_equal(choose, "exit"))
 							break;
 
 					}
@@ -63,12 +63,14 @@ int main() {
 				cout << "Enter the expr and press Enter (enter 'exit' to exit): ";
 				getline(cin, expr);
 				
-				if (is_exit(expr))
+				if (is_equal(expr, "exit"))
 					break;
 			}
 		}
-		if (is_exit(expr) || is_exit(choose)) // exit if "exit" was entered in exception-loop
+
+		if (is_equal(expr, "exit") || is_equal(choose, "exit")) // exit if "exit" was entered in exception-loop
 			break;
+		
 	}
 
 	cout << "Exiting..." << endl;
